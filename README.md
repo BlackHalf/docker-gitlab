@@ -141,6 +141,13 @@ Alternatively you can build the image locally.
 docker build -t sameersbn/gitlab github.com/sameersbn/docker-gitlab
 ```
 
+## Enterprise Edition
+
+```bash
+docker build --build-arg GITLAB_EDITION=ee -t sameersbn/gitlab-ee github.com/sameersbn/docker-gitlab
+```
+
+
 ## Quick Start
 
 The quickest way to get started is using [docker-compose](https://docs.docker.com/compose/).
