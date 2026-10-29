@@ -1,24 +1,22 @@
-GitLab Backup to s3 compatible storage
-=================================================
+# GitLab Backup to s3 compatible storage
 
-Enables automatic backups to selfhosted s3 compatible storage like minio (https://minio.io/) and others.
+Enables automatic backups to self-hosted s3 compatible storage like minio (<https://minio.io/>) and others.
 This is an extend of AWS Remote Backups.
 
 As explained in [doc.gitlab.com](https://docs.gitlab.com/ce/raketasks/backup_restore.html#upload-backups-to-remote-cloud-storage), it uses [Fog library](http://fog.io) and the module fog-aws. More details on [s3 supported parameters](https://github.com/fog/fog-aws/blob/master/lib/fog/aws/storage.rb)
 
-
-- [Available Parameters](#available-parameters)
-- [Installation](#installation)
-- [Maintenance](#maintenance)
+- [GitLab Backup to s3 compatible storage](#gitlab-backup-to-s3-compatible-storage)
+  - [Available Parameters](#available-parameters)
+  - [Installation](#installation)
+    - [Docker Compose](#docker-compose)
     - [Creating Backups](#creating-backups)
     - [Restoring Backups](#restoring-backups)
 
-
-# Available Parameters
+## Available Parameters
 
 Here is an example of all configuration parameters that can be used in the GitLab container.
 
-```
+```yaml
 ...
 gitlab:
     ...
@@ -29,7 +27,6 @@ gitlab:
     - AWS_BACKUP_SECRET_ACCESS_KEY=minio123
     - AWS_BACKUP_BUCKET=docker
     - AWS_BACKUP_MULTIPART_CHUNK_SIZE=104857600
-
 ```
 
 where:
@@ -41,13 +38,13 @@ where:
 | `AWS_BACKUP_ACCESS_KEY_ID` | AWS access key id. No defaults. |
 | `AWS_BACKUP_SECRET_ACCESS_KEY` | AWS secret access key. No defaults. |
 | `AWS_BACKUP_BUCKET` | AWS bucket for backup uploads. No defaults. |
-| `AWS_BACKUP_MULTIPART_CHUNK_SIZE` | Enables mulitpart uploads when file size reaches a defined size. See at [AWS S3 Docs](http://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html) |
+| `AWS_BACKUP_MULTIPART_CHUNK_SIZE` | Enables multipart uploads when file size reaches a defined size. See at [AWS S3 Docs](http://docs.aws.amazon.com/AmazonS3/latest/dev/uploadobjusingmpu.html) |
 
 For more info look at [Available Configuration Parameters](https://github.com/sameersbn/docker-gitlab#available-configuration-parameters).
 
 A minimum set of these parameters are required to use the s3 compatible storage:
 
-```yml
+```yaml
 ...
 gitlab:
     environment:
@@ -58,21 +55,20 @@ gitlab:
     - AWS_BACKUP_BUCKET=docker
 ...
 ```
-# Installation
+
+## Installation
 
 Starting a fresh installation with GitLab would be like the `docker-compose` file.
 
-## Docker Compose
+### Docker Compose
 
 This is an example with minio.
 
 ```yml
-version: '2'
-
 services:
   redis:
     restart: always
-    image: sameersbn/redis:6.2
+    image: sameersbn/redis:7
     command:
     - --loglevel warning
     volumes:
@@ -80,14 +76,15 @@ services:
 
   postgresql:
     restart: always
-    image: sameersbn/postgresql:10-2
+    image: kkimurak/sameersbn-postgresql:17
     volumes:
     - /tmp/docker/gitlab/postgresql:/var/lib/postgresql:Z
     environment:
     - DB_USER=gitlab
     - DB_PASS=password
     - DB_NAME=gitlabhq_production
-    - DB_EXTENSION=pg_trgm
+    - DB_EXTENSION=pg_trgm,btree_gist
+    - PG_PARAM_MAX_LOCKS_PER_TRANSACTION=128
 
   gitlab:
     restart: always
@@ -122,6 +119,7 @@ services:
     - GITLAB_SECRETS_DB_KEY_BASE=long-and-random-alphanumeric-string
     - GITLAB_SECRETS_SECRET_KEY_BASE=long-and-random-alphanumeric-string
     - GITLAB_SECRETS_OTP_KEY_BASE=long-and-random-alphanumeric-string
+    - GITLAB_SECRETS_ENCRYPTED_SETTINGS_KEY_BASE=long-and-random-alphanumeric-string
     - GITLAB_ROOT_PASSWORD=
     - GITLAB_ROOT_EMAIL=
     - GITLAB_NOTIFY_ON_BROKEN_BUILDS=true
@@ -214,15 +212,16 @@ services:
     command: server /export
 ```
 
-
-## Creating Backups
+### Creating Backups
 
 Execute the rake task with a removeable container.
+
 ```bash
 docker run --name gitlab -it --rm [OPTIONS] \
     sameersbn/gitlab:8.16.4 app:rake gitlab:backup:create
 ```
-## Restoring Backups
+
+### Restoring Backups
 
 Execute the rake task to restore a backup. Make sure you run the container in interactive mode `-it`.
 

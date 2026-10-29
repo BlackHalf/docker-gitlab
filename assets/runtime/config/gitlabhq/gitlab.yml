@@ -170,6 +170,24 @@ production: &base
     ## Disable jQuery and CSS animations
     # disable_animations: true
 
+  #start-microsoft-graph-mailer
+  # Allows delivery of emails using Microsoft Graph API with OAuth 2.0 client credentials flow.
+  microsoft_graph_mailer:
+    enabled: {{MICROSOFT_GRAPH_MAILER_ENABLED}}
+    # The unique identifier for the user. To use Microsoft Graph on behalf of the user.
+    user_id: "{{MICROSOFT_GRAPH_MAILER_USER_ID}}"
+    # The directory tenant the application plans to operate against, in GUID or domain-name format.
+    tenant: "{{MICROSOFT_GRAPH_MAILER_TENANT}}"
+    # The application ID that's assigned to your app. You can find this information in the portal where you registered your app.
+    client_id: "{{MICROSOFT_GRAPH_MAILER_CLIENT_ID}}"
+    # The client secret that you generated for your app in the app registration portal.
+    client_secret: "{{MICROSOFT_GRAPH_MAILER_CLIENT_SECRET}}"
+    # Defaults to "https://login.microsoftonline.com".
+    azure_ad_endpoint: "{{MICROSOFT_GRAPH_MAILER_AZURE_AD_ENDPOINT}}"
+    # Defaults to "https://graph.microsoft.com".
+    graph_endpoint: "{{MICROSOFT_GRAPH_MAILER_GRAPH_ENDPOINT}}"
+  #end-microsoft-graph-mailer
+
   ## Reply by email
   # Allow users to comment on issues and merge requests by replying to notification emails.
   # For documentation on how to set this up, see http://doc.gitlab.com/ce/administration/reply_by_email.html
@@ -410,6 +428,7 @@ production: &base
     artifacts_server: {{GITLAB_PAGES_ARTIFACTS_SERVER}} # Set to false if you want to disable online view of HTML artifacts
     external_http: {{GITLAB_PAGES_EXTERNAL_HTTP}} # If defined, enables custom domain support in GitLab Pages
     external_https: {{GITLAB_PAGES_EXTERNAL_HTTPS}} # If defined, enables custom domain and certificate support in GitLab Pages
+    namespace_in_path: {{GITLAB_PAGES_NAMESPACE_IN_PATH}}
 
     # File that contains the shared secret key for verifying access for gitlab-pages.
     # Default is '.gitlab_pages_secret' relative to Rails.root (i.e. root of the GitLab app).
@@ -439,6 +458,11 @@ production: &base
   # Periodically executed jobs, to self-heal GitLab, do external synchronizations, etc.
   # Please read here for more information: https://github.com/ondrejbartas/sidekiq-cron#adding-cron-job
   cron_jobs:
+    # Interval, in seconds, for each Sidekiq process to check for scheduled cron jobs that need to be enqueued. If not
+    # set, the interval scales dynamically with the number of Sidekiq processes. If set to 0, disable polling for cron
+    # jobs entirely.
+    # poll_interval: 30
+
     # Flag stuck CI jobs as failed
     stuck_ci_jobs_worker:
       cron: "0 * * * *"
@@ -448,9 +472,18 @@ production: &base
     # Remove expired build artifacts
     expire_build_artifacts_worker:
       cron: "50 * * * *"
+    # Remove expired pipeline artifacts
+    ci_pipelines_expire_artifacts_worker:
+      cron: "*/23 * * * *"
+    # Remove files from object storage
+    ci_schedule_delete_objects_worker:
+      cron: "*/16 * * * *"
     # Stop expired environments
     environments_auto_stop_cron_worker:
       cron: "24 * * * *"
+    # Delete stopped environments
+    environments_auto_delete_cron_worker:
+      cron: "34 * * * *"
     # Periodically run 'git fsck' on all repositories. If started more than
     # once per hour you will have concurrent 'git fsck' jobs.
     repository_check_worker:
@@ -460,10 +493,10 @@ production: &base
       cron: "17 * * * *"
     # Send admin emails once a week
     admin_email_worker:
-      cron: "0 0 * * 0"
+      cron: "{{GITLAB_ADMIN_EMAIL_WORKER_CRON}}"
     # Send emails for personal tokens which are about to expire
     personal_access_tokens_expiring_worker:
-      cron: "0 1 * * *"
+      cron: "{{GITLAB_PERSONAL_ACCESS_TOKEN_EXPIRING_WORKER_CRON}}"
 
     # Remove outdated repository archives
     repository_archive_cache_worker:
@@ -476,6 +509,18 @@ production: &base
     # Periodically migrate diffs from the database to external storage
     schedule_migrate_external_diffs_worker:
       cron: "15 * * * *"
+
+    # Periodically update ci_runner_versions table with up-to-date versions and status.
+    ci_runner_versions_reconciliation_worker:
+      cron: "@daily"
+
+    # Periodically clean up stale runner machines.
+    ci_runners_stale_machines_cleanup_worker:
+      cron: "36 * * * *"
+
+    # Periodically queue syncing of finished pipelines from p_ci_finished_pipeline_ch_sync_events to ClickHouse
+    ci_click_house_finished_pipelines_sync_worker:
+      cron: "*/4 * * * *"
 
   # GitLab EE only jobs. These jobs are automatically enabled for an EE
   # installation, and ignored for a CE installation.
@@ -937,7 +982,7 @@ production: &base
                   login_url: '{{OAUTH_CAS3_LOGIN_URL}}',
                   service_validate_url: '{{OAUTH_CAS3_VALIDATE_URL}}',
                   logout_url: '{{OAUTH_CAS3_LOGOUT_URL}}'} }
-       - { name: 'authentiq',
+      - { name: 'authentiq',
           app_id: '{{OAUTH_AUTHENTIQ_CLIENT_ID}}',
           app_secret: 'OAUTH_AUTHENTIQ_CLIENT_SECRET',
           args: { scope: {{OAUTH_AUTHENTIQ_SCOPE}}, redirect_uri: '{{OAUTH_AUTHENTIQ_REDIRECT_URI}}' } }
@@ -1031,7 +1076,33 @@ production: &base
             client_id: '{{OAUTH_AZURE_ACTIVEDIRECTORY_V2_CLIENT_ID}}',
             client_secret: '{{OAUTH_AZURE_ACTIVEDIRECTORY_V2_CLIENT_SECRET}}',
             tenant_id: '{{OAUTH_AZURE_ACTIVEDIRECTORY_V2_TENANT_ID}}' } }
-
+      - { name: 'openid_connect',
+          label: '{{OAUTH_OIDC_LABEL}}',
+          icon: '{{OAUTH_OIDC_ICON}}',
+          args: {
+            name: 'openid_connect',
+            scope: {{OAUTH_OIDC_SCOPE}},
+            response_type: '{{OAUTH_OIDC_RESPONSE_TYPE}}',
+            issuer: '{{OAUTH_OIDC_ISSUER}}',
+            discovery: {{OAUTH_OIDC_DISCOVERY}},
+            client_auth_method: '{{OAUTH_OIDC_CLIENT_AUTH_METHOD}}',
+            uid_field: '{{OAUTH_OIDC_UID_FIELD}}',
+            send_scope_to_token_endpoint: {{OAUTH_OIDC_SEND_SCOPE_TO_TOKEN_EP}},
+            pkce: {{OAUTH_OIDC_PKCE}},
+            client_options: {
+              identifier: '{{OAUTH_OIDC_CLIENT_ID}}',
+              secret: '{{OAUTH_OIDC_CLIENT_SECRET}}',
+              redirect_uri: '{{OAUTH_OIDC_REDIRECT_URI}}' } } }
+      - { name: 'jwt',
+          label: '{{OAUTH_JWT_LABEL}}',
+          args: {
+            secret: '{{OAUTH_JWT_SECRET}}',
+            algorithm: '{{OAUTH_JWT_ALGORITHM}}',
+            uid_claim: '{{OAUTH_JWT_UID_CLAIM}}',
+            required_claims: {{OAUTH_JWT_REQUIRED_CLAIMS}},
+            info_map: { name: '{{OAUTH_JWT_INFO_MAP_NAME}}', email: '{{OAUTH_JWT_INFO_MAP_EMAIL}}' },
+            auth_url: '{{OAUTH_JWT_AUTH_URL}}',
+            valid_within: {{OAUTH_JWT_VALID_WITHIN}} } }
     # SSO maximum session duration in seconds. Defaults to CAS default of 8 hours.
     # cas3:
     #   session_duration: 28800

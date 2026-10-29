@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: postgresql
-        image: sameersbn/postgresql:14-20230628
+        image: kkimurak/sameersbn-postgresql:17
         env:
         - name: DB_USER
           value: gitlab
@@ -23,7 +23,9 @@ spec:
         - name: DB_NAME
           value: gitlab_production
         - name: DB_EXTENSION
-          value: pg_trgm
+          value: pg_trgm,btree_gist
+        - name: PG_PARAM_MAX_LOCKS_PER_TRANSACTION
+          value: 128
         ports:
         - name: postgres
           containerPort: 5432
